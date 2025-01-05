@@ -11,7 +11,7 @@ public class Routes {
     @Bean
     public RouteLocator gameServiceRoute(RouteLocatorBuilder builder) {
         return builder.routes()
-                .route("game-route", r -> r.path("/game/**")
+                .route("game-route", r -> r.path("/api/game/**")
                         .filters(f -> f.stripPrefix(1))
 //                                .circuitBreaker(c -> c.setName("gameServiceCircuitBreaker")
 //                                        .setFallbackUri("forward:/fallbackRoute")))
@@ -22,7 +22,7 @@ public class Routes {
     @Bean
     public RouteLocator userServiceRoute(RouteLocatorBuilder builder) {
         return builder.routes()
-                .route("user-route", r -> r.path("/user/**")
+                .route("user-route", r -> r.path("/api/user/**")
                         .filters(f -> f.stripPrefix(1))
                         .uri("http://localhost:8081"))
                 .build();
@@ -31,7 +31,7 @@ public class Routes {
     @Bean
     public RouteLocator authServiceRoute(RouteLocatorBuilder builder) {
         return builder.routes()
-                .route("auth-route", r -> r.path("/auth/**")
+                .route("auth-route", r -> r.path("/api/auth/**")
                         .filters(f -> f.stripPrefix(1))
                         .uri("http://localhost:8082"))
                 .build();

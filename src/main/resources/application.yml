@@ -1,0 +1,44 @@
+spring.application.name: api-gateway
+server.port: 9000
+
+# Actuator
+management:
+  health.circuitbreakers.enabled: true
+  endpoints.web.exposure.include: "*"
+  endpoint.health.show-details: always
+
+#Resilinece4j Properties
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        minimum-number-of-calls: 5
+  retry:
+    configs:
+          default:
+            max-attempts: 3
+            wait-duration: 2s
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 3s
+
+spring:
+  cloud:
+    gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "http://localhost:5173"
+            allowedHeaders: "*"
+            allowedMethods: "*"
+            allow-credentials: true
