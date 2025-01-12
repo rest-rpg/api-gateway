@@ -16,21 +16,9 @@ public class Routes {
 //                                .circuitBreaker(c -> c.setName("gameServiceCircuitBreaker")
 //                                        .setFallbackUri("forward:/fallbackRoute")))
                         .uri("http://localhost:8080"))
-                .build();
-    }
-
-    @Bean
-    public RouteLocator userServiceRoute(RouteLocatorBuilder builder) {
-        return builder.routes()
                 .route("user-route", r -> r.path("/api/user/**")
                         .filters(f -> f.stripPrefix(1))
                         .uri("http://localhost:8081"))
-                .build();
-    }
-
-    @Bean
-    public RouteLocator authServiceRoute(RouteLocatorBuilder builder) {
-        return builder.routes()
                 .route("auth-route", r -> r.path("/api/auth/**")
                         .filters(f -> f.stripPrefix(1))
                         .uri("http://localhost:8082"))
