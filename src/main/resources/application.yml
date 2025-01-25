@@ -38,7 +38,11 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOrigins: "http://localhost:5173"
+            allowedOrigins: "http://localhost:5173,http://localhost:3000"
             allowedHeaders: "*"
             allowedMethods: "*"
             allow-credentials: true
+routes:
+  game-url: http://localhost:8080
+  user-url: http://localhost:8081
+  auth-url: http://localhost:8082
