@@ -33,16 +33,14 @@ resilience4j:
 spring:
   cloud:
     gateway:
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOrigins: "http://localhost:5173,http://localhost:3000,https://www.rest-rpg.com"
-            allowedHeaders: "*"
-            allowedMethods: "*"
-            allow-credentials: true
-routes:
-  game-url: http://localhost:8080
-  user-url: http://localhost:8081
-  auth-url: http://localhost:8082
+      server:
+        webflux:
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowedOrigins: "http://localhost:5173,http://localhost:3000,https://www.rest-rpg.com"
+                allowedHeaders: "*"
+                allowedMethods: "*"
+                allow-credentials: true

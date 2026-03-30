@@ -1,0 +1,98 @@
+spring:
+  application:
+    name: api-gateway-test
+  cloud:
+    gateway:
+          server:
+            webflux:
+              routes:
+                - id: game-route
+                  uri: http://localhost:8080
+                  predicates:
+                    - Path=/api/game/**
+                  filters:
+                    - StripPrefix=1
+                    - name: CircuitBreaker
+                      args:
+                        name: gameServiceCB
+                        fallbackUri: forward:/fallback/game
+                    - name: FallbackHeaders
+                      args:
+                        executionExceptionTypeHeaderName: Exception-Type
+                        executionExceptionMessageHeaderName: Exception-Message
+                  metadata:
+                    response-timeout: 3000
+                    connect-timeout: 1000
+
+                - id: user-route
+                  uri: http://localhost:8081
+                  predicates:
+                    - Path=/api/user/**
+                  filters:
+                    - StripPrefix=1
+                    - name: CircuitBreaker
+                      args:
+                        name: userServiceCB
+                        fallbackUri: forward:/fallback/user
+                    - name: FallbackHeaders
+                      args:
+                        executionExceptionTypeHeaderName: Exception-Type
+                        executionExceptionMessageHeaderName: Exception-Message
+                  metadata:
+                    response-timeout: 2000
+                    connect-timeout: 1000
+
+                - id: auth-route
+                  uri: http://localhost:8082
+                  predicates:
+                    - Path=/api/auth/**
+                  filters:
+                    - StripPrefix=1
+                    - name: CircuitBreaker
+                      args:
+                        name: authServiceCB
+                        fallbackUri: forward:/fallback/auth
+                    - name: FallbackHeaders
+                      args:
+                        executionExceptionTypeHeaderName: Exception-Type
+                        executionExceptionMessageHeaderName: Exception-Message
+                  metadata:
+                    response-timeout: 2000
+                    connect-timeout: 1000
+
+              globalcors:
+                cors-configurations:
+                  '[/**]':
+                    allowedOrigins: "*"
+                    allowedHeaders: "*"
+                    allowedMethods: "*"
+                    allow-credentials: true
+
+server:
+  port: 0  # Random port for tests
+
+# Test routes configuration
+
+# Resilience4j test configuration
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        minimum-number-of-calls: 5
+
+# Actuator for tests
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always

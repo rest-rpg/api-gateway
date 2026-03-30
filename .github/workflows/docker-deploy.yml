@@ -1,0 +1,106 @@
+name: Build & Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  SERVICE_NAME: api-gateway
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    environment: java_deploy
+    env:
+      NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add repository and Nexus host entry
+        run: |
+          echo "144.24.176.218 registry.ms-repos.com" | sudo tee -a /etc/hosts
+          echo "144.24.176.218 nexus.ms-repos.com" | sudo tee -a /etc/hosts
+
+      - name: Set up JDK 17 and Maven auth
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          server-id: nexus
+          server-username: NEXUS_USERNAME
+          server-password: NEXUS_PASSWORD
+
+      - name: Add Nexus mirror + auth to Maven settings
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<EOF
+          <settings>
+            <mirrors>
+              <mirror>
+                <id>nexus</id>
+                <mirrorOf>*</mirrorOf>
+                <url>https://nexus.ms-repos.com/repository/maven-public/</url>
+              </mirror>
+            </mirrors>
+      
+            <servers>
+              <server>
+                <id>nexus</id>
+                <username>${NEXUS_USERNAME}</username>
+                <password>${NEXUS_PASSWORD}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+
+      - name: Import Nexus cert into JVM cacerts
+        run: |
+          echo "${{ secrets.NPM_CA_CERT }}" > nexus.crt
+          sudo keytool -importcert -noprompt \
+            -alias nexus-ms-repos \
+            -file nexus.crt \
+            -keystore "$JAVA_HOME/lib/security/cacerts" \
+            -storepass changeit
+
+      - name: Build JAR
+        run: |
+          mvn clean package -am -DskipTests
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
+
+      - name: Trust Nexus certificate for Docker
+        run: |
+          sudo mkdir -p /etc/docker/certs.d/registry.ms-repos.com
+          echo "${{ secrets.NPM_CA_CERT }}" | sudo tee /etc/docker/certs.d/registry.ms-repos.com/ca.crt
+          sudo systemctl restart docker
+
+      - name: Log in to private registry
+        run: |
+          echo "${{ secrets.REPOSITORY_PASSWORD }}" | docker login registry.ms-repos.com \
+            --username "${{ secrets.REPOSITORY_USERNAME }}" \
+            --password-stdin
+
+      - name: Read version from pom.xml
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t registry.ms-repos.com/"$SERVICE_NAME":${{ steps.version.outputs.version }} .
+
+      - name: Push Docker image
+        run: |
+          docker push registry.ms-repos.com/"$SERVICE_NAME":${{ steps.version.outputs.version }}
