@@ -8,23 +8,28 @@ on:
 
 env:
   SERVICE_NAME: api-gateway
+  REGISTRY: registry.ms-repos.com
 
 jobs:
   docker:
     runs-on: ubuntu-latest
     environment: java_deploy
+
     env:
       NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
       NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      # --- DNS workaround ---
       - name: Add repository and Nexus host entry
         run: |
           echo "144.24.176.218 registry.ms-repos.com" | sudo tee -a /etc/hosts
           echo "144.24.176.218 nexus.ms-repos.com" | sudo tee -a /etc/hosts
 
+      # --- JAVA + MAVEN ---
       - name: Set up JDK 17 and Maven auth
         uses: actions/setup-java@v4
         with:
@@ -34,7 +39,7 @@ jobs:
           server-username: NEXUS_USERNAME
           server-password: NEXUS_PASSWORD
 
-      - name: Add Nexus mirror + auth to Maven settings
+      - name: Configure Maven settings
         run: |
           mkdir -p ~/.m2
           cat > ~/.m2/settings.xml <<EOF
@@ -46,7 +51,6 @@ jobs:
                 <url>https://nexus.ms-repos.com/repository/maven-public/</url>
               </mirror>
             </mirrors>
-      
             <servers>
               <server>
                 <id>nexus</id>
@@ -57,7 +61,7 @@ jobs:
           </settings>
           EOF
 
-      - name: Import Nexus cert into JVM cacerts
+      - name: Import Nexus cert into JVM
         run: |
           echo "${{ secrets.NPM_CA_CERT }}" > nexus.crt
           sudo keytool -importcert -noprompt \
@@ -66,10 +70,7 @@ jobs:
             -keystore "$JAVA_HOME/lib/security/cacerts" \
             -storepass changeit
 
-      - name: Build JAR
-        run: |
-          mvn clean package -am -DskipTests
-
+      # --- CACHE MAVEN ---
       - name: Cache Maven repository
         uses: actions/cache@v4
         with:
@@ -78,29 +79,59 @@ jobs:
           restore-keys: |
             maven-${{ runner.os }}-
 
+      - name: Build JAR
+        run: mvn clean package -pl "$SERVICE_NAME" -am -DskipTests
+
+      # --- DOCKER CERT ---
       - name: Trust Nexus certificate for Docker
         run: |
-          sudo mkdir -p /etc/docker/certs.d/registry.ms-repos.com
-          echo "${{ secrets.NPM_CA_CERT }}" | sudo tee /etc/docker/certs.d/registry.ms-repos.com/ca.crt
+          sudo mkdir -p /etc/docker/certs.d/${REGISTRY}
+          echo "${{ secrets.NPM_CA_CERT }}" | sudo tee /etc/docker/certs.d/${REGISTRY}/ca.crt
           sudo systemctl restart docker
 
-      - name: Log in to private registry
+      # --- LOGIN ---
+      - name: Login to registry
         run: |
-          echo "${{ secrets.REPOSITORY_PASSWORD }}" | docker login registry.ms-repos.com \
+          echo "${{ secrets.REPOSITORY_PASSWORD }}" | docker login $REGISTRY \
             --username "${{ secrets.REPOSITORY_USERNAME }}" \
             --password-stdin
 
+      # --- VERSION ---
       - name: Read version from pom.xml
         id: version
         run: |
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build Docker image
-        run: |
-          docker build \
-            -t registry.ms-repos.com/"$SERVICE_NAME":${{ steps.version.outputs.version }} .
+      # --- MULTI-ARCH SETUP ---
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-      - name: Push Docker image
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create buildkit config
         run: |
-          docker push registry.ms-repos.com/"$SERVICE_NAME":${{ steps.version.outputs.version }}
+          cat > buildkitd.toml <<EOF
+          [registry."registry.ms-repos.com"]
+            insecure = true
+          EOF
+
+      - name: Create buildx builder
+        run: |
+          docker buildx create \
+            --use \
+            --name mybuilder \
+            --driver docker-container \
+            --driver-opt network=host \
+            --config buildkitd.toml
+
+      - name: Build & Push
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            --add-host registry.ms-repos.com:144.24.176.218 \
+            --add-host nexus.ms-repos.com:144.24.176.218 \
+            -t $REGISTRY/$SERVICE_NAME:${{ steps.version.outputs.version }} \
+            --push \
+            "$SERVICE_NAME"
