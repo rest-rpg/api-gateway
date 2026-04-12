@@ -80,7 +80,7 @@ jobs:
             maven-${{ runner.os }}-
 
       - name: Build JAR
-        run: mvn clean package -pl "$SERVICE_NAME" -am -DskipTests
+        run: mvn clean package -am -DskipTests
 
       # --- DOCKER CERT ---
       - name: Trust Nexus certificate for Docker
@@ -133,5 +133,4 @@ jobs:
             --add-host registry.ms-repos.com:144.24.176.218 \
             --add-host nexus.ms-repos.com:144.24.176.218 \
             -t $REGISTRY/$SERVICE_NAME:${{ steps.version.outputs.version }} \
-            --push \
-            "$SERVICE_NAME"
+            --push .
